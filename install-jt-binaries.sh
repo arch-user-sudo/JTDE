@@ -284,7 +284,17 @@ case "$PKG_FAMILY" in
         ;;
 esac
 
-mkdir -p "$BASE_DIR"
+# Create the checkout root as the normal user.  Creating it as root leaves it
+# unwritable and makes every clone fail with "Permission denied".
+run_as_user mkdir -p "$BASE_DIR"
+
+# A previous run may have left the directory owned by root; repair that so
+# clones can write into it.
+dir_owner="$(stat -c %U "$BASE_DIR" 2>/dev/null || true)"
+if [ -n "$dir_owner" ] && [ "$dir_owner" != "$TARGET_USER" ]; then
+    echo "--> fixing ownership of $BASE_DIR (was $dir_owner)"
+    chown "$TARGET_USER" "$BASE_DIR"
+fi
 
 for entry in "${repos[@]}"; do
     IFS='|' read -r name slug url <<<"$entry"
