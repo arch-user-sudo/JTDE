@@ -3,13 +3,11 @@
 # install-jt-binaries.sh
 #
 # Initial-install helper for the repositories that jtupdate manages.
-# It first verifies that the required build dependencies (commands and
-# pkg-config modules) are present, and refuses to clone anything if they are
-# not.  For each repo it then clones the checkout into <base-dir>/<slug> and
-# builds it with `make -j<JOBS>`.  Once everything is built, all installs are
-# run inside a single elevated pass, so doas/sudo asks for the password only
-# once.  Every prompt happens in the terminal this script runs in.  jtgreeter
-# is intentionally not installed.
+# On Arch, Debian/Ubuntu, and Fedora it installs the build dependencies first
+# (using pacman, apt, or dnf), then clones each managed repo into
+# <base-dir>/<slug>, builds it, and installs everything in one elevated pass.
+# The dependency install and all the installs run under a single doas/sudo
+# session, so the password is asked for only once.  jtgreeter is not installed.
 #
 # Usage:
 #   ./install-jt-binaries.sh [--check] [--base-dir DIR]
@@ -28,12 +26,13 @@ usage() {
     cat <<'EOF'
 Usage: install-jt-binaries.sh [--check] [--base-dir DIR]
 
-Clones and builds the binaries managed by jtupdate, then installs them all
-in one elevated pass (a single password prompt).  jtgreeter is not installed.
+Installs build dependencies (Arch / Debian / Fedora), clones and builds the
+binaries managed by jtupdate, then installs them all in one elevated pass
+(a single password prompt).  jtgreeter is not installed.
 
 Options:
   --check          list every required build dependency and its status, then
-                   exit without cloning, building, or installing anything
+                   exit without installing, cloning, building, or doing anything
   --base-dir DIR   where checkouts live (default: $HOME/jtupdate/repos)
   -h, --help       show this help
 
@@ -81,14 +80,11 @@ REPOS=(
     "jtpolkit|jtpolkit|https://github.com/arch-user-sudo/jtpolkit.git"
 )
 
-# Build dependencies, checked before anything is cloned so a missing package
-# cannot leave half a checkout tree behind.
+# Used by --check to report the state of the current machine.
 REQUIRED_COMMANDS=(
     git make gcc cc pkg-config wayland-scanner python3
 )
 
-# pkg-config modules the managed Makefiles link against.  Optional feature
-# toggles (XWayland, Vulkan) are off by default, so their modules are omitted.
 REQUIRED_MODULES=(
     # wayland / cairo UI stack shared by most repos
     wayland-client wayland-cursor wayland-server wayland-protocols
@@ -108,20 +104,72 @@ REQUIRED_MODULES=(
     polkit-agent-1 polkit-gobject-1
 )
 
-missing_commands=()
-for c in "${REQUIRED_COMMANDS[@]}"; do
-    command -v "$c" >/dev/null 2>&1 || missing_commands+=("$c")
-done
-
-missing_modules=()
-if command -v pkg-config >/dev/null 2>&1; then
-    for m in "${REQUIRED_MODULES[@]}"; do
-        pkg-config --exists "$m" 2>/dev/null || missing_modules+=("$m")
-    done
+# Distro detection.  Package families are Arch, Debian, and Fedora; anything
+# else is left alone (the build itself will report missing dependencies).
+DISTRO_ID="unknown"
+DISTRO_LIKE=""
+if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    DISTRO_ID="${ID:-unknown}"
+    DISTRO_LIKE="${ID_LIKE:-}"
 fi
+
+case " $DISTRO_ID $DISTRO_LIKE " in
+    *arch*|*manjaro*|*endeavouros*|*artix*)
+        PKG_FAMILY=arch
+        PACKAGES=(
+            base-devel git pkgconf python libxkbcommon
+            wayland wayland-protocols cairo pango glib2 gdk-pixbuf2
+            librsvg pipewire libsoup3 curl networkmanager
+            libinput pixman libdrm mesa lcms2 systemd-libs seatd
+            libdisplay-info libliftoff harfbuzz gtk3 gtk-layer-shell polkit
+        )
+        ;;
+    *debian*|*ubuntu*|*mint*|*pop*)
+        PKG_FAMILY=debian
+        PACKAGES=(
+            build-essential git pkg-config python3 libwayland-dev
+            wayland-protocols libcairo2-dev libpango1.0-dev libglib2.0-dev
+            libxkbcommon-dev libgdk-pixbuf-2.0-dev librsvg2-dev
+            libpipewire-0.3-dev libsoup-3.0-dev libcurl4-openssl-dev
+            libnm-dev libinput-dev libpixman-1-dev libdrm-dev libegl-dev
+            libgbm-dev libgles2-mesa-dev liblcms2-dev libudev-dev libseat-dev
+            libdisplay-info-dev libliftoff-dev libharfbuzz-dev libgtk-3-dev
+            libgtk-layer-shell-dev libpolkit-agent-1-dev libpolkit-gobject-1-dev
+        )
+        ;;
+    *fedora*|*rhel*|*centos*|*rocky*|*alma*)
+        PKG_FAMILY=fedora
+        PACKAGES=(
+            gcc make git pkgconf-pkg-config python3 wayland-devel
+            wayland-protocols-devel cairo-devel pango-devel glib2-devel
+            libxkbcommon-devel gdk-pixbuf2-devel librsvg2-devel pipewire-devel
+            libsoup3-devel libcurl-devel NetworkManager-devel libinput-devel
+            pixman-devel libdrm-devel mesa-libEGL-devel mesa-libgbm-devel
+            mesa-libGLES-devel lcms2-devel systemd-devel libseat-devel
+            libdisplay-info-devel libliftoff-devel harfbuzz-devel gtk3-devel
+            gtk-layer-shell-devel polkit-devel
+        )
+        ;;
+    *)
+        PKG_FAMILY=unknown
+        PACKAGES=()
+        ;;
+esac
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
     echo "build dependency check"
+    echo "detected distro : $DISTRO_ID ($PKG_FAMILY)"
+    if [ "${#PACKAGES[@]}" -gt 0 ]; then
+        echo
+        echo "packages this distro would install:"
+        printf '  %s\n' "${PACKAGES[@]}"
+    else
+        echo
+        echo "automatic dependency installation is unavailable on this distro."
+    fi
+
     echo
     echo "commands:"
     for c in "${REQUIRED_COMMANDS[@]}"; do
@@ -147,7 +195,16 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
     fi
 
     echo
-    if [ "${#missing_commands[@]}" -eq 0 ] && [ "${#missing_modules[@]}" -eq 0 ]; then
+    missing=0
+    for c in "${REQUIRED_COMMANDS[@]}"; do
+        command -v "$c" >/dev/null 2>&1 || missing=1
+    done
+    if command -v pkg-config >/dev/null 2>&1; then
+        for m in "${REQUIRED_MODULES[@]}"; do
+            pkg-config --exists "$m" 2>/dev/null || missing=1
+        done
+    fi
+    if [ "$missing" -eq 0 ]; then
         echo "all required build dependencies are present."
         exit 0
     fi
@@ -155,18 +212,8 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
     exit 1
 fi
 
-if [ "${#missing_commands[@]}" -gt 0 ] || [ "${#missing_modules[@]}" -gt 0 ]; then
-    echo "error: missing build dependencies; nothing has been cloned." >&2
-    if [ "${#missing_commands[@]}" -gt 0 ]; then
-        echo >&2
-        echo "missing commands:" >&2
-        printf '  - %s\n' "${missing_commands[@]}" >&2
-    fi
-    if [ "${#missing_modules[@]}" -gt 0 ]; then
-        echo >&2
-        echo "missing pkg-config modules (install the dev packages that provide them):" >&2
-        printf '  - %s\n' "${missing_modules[@]}" >&2
-    fi
+if ! command -v runuser >/dev/null 2>&1; then
+    echo "error: runuser not found (needed to build as your normal user)" >&2
     exit 1
 fi
 
@@ -179,19 +226,67 @@ else
     exit 1
 fi
 
-echo "checkout root : $BASE_DIR"
-echo "privileges    : ${PRIV[0]}"
-echo
+TARGET_USER="$(id -un)"
 
-mkdir -p "$BASE_DIR"
+# The whole job runs in one elevated shell so the password is asked once.
+# Within it, cloning and building are dropped back to the normal user with
+# runuser; only dependency installation and `make install` stay privileged.
+worker="$(mktemp "${TMPDIR:-/tmp}/install-jt-worker.XXXXXX")"
+trap 'rm -f "$worker"' EXIT
 
-failed=()
+cat > "$worker" <<'WORKER'
+#!/usr/bin/env bash
+set -u
+
+PKG_FAMILY=$1; shift
+packages=()
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do
+    packages+=("$1")
+    shift
+done
+if [ "$#" -gt 0 ]; then shift; fi
+repos=("$@")
+
+run_as_user() {
+    runuser -u "$TARGET_USER" -- \
+        env HOME="$USER_HOME" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
+        PATH="$USER_PATH" "$@"
+}
+
+failures=()
 ready_dirs=()
 ready_names=()
 
-# Phase 1: clone and build everything as the normal user.  No password is
-# needed here, so a long build can never expire an elevated session.
-for entry in "${REPOS[@]}"; do
+echo "==> installing build dependencies ($PKG_FAMILY)"
+case "$PKG_FAMILY" in
+    arch)
+        if ! pacman -S --needed --noconfirm "${packages[@]}"; then
+            echo "error: dependency installation failed" >&2
+            exit 1
+        fi
+        ;;
+    debian)
+        if ! apt-get update -qq || \
+           ! DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"; then
+            echo "error: dependency installation failed" >&2
+            exit 1
+        fi
+        ;;
+    fedora)
+        if ! dnf install -y "${packages[@]}"; then
+            echo "error: dependency installation failed" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "note: automatic dependency installation is not supported on this" >&2
+        echo "      distro; continuing and letting the build report missing deps." >&2
+        ;;
+esac
+
+mkdir -p "$BASE_DIR"
+
+for entry in "${repos[@]}"; do
     IFS='|' read -r name slug url <<<"$entry"
     dir="$BASE_DIR/$slug"
 
@@ -202,21 +297,21 @@ for entry in "${REPOS[@]}"; do
         echo "--> already cloned, skipping clone"
     elif [ -e "$dir" ]; then
         echo "error: $dir exists but is not a git checkout" >&2
-        failed+=("$name (checkout exists)")
+        failures+=("$name (checkout exists)")
         continue
     else
         echo "--> cloning $url"
-        if ! git clone --progress "$url" "$dir"; then
+        if ! run_as_user git clone --progress "$url" "$dir"; then
             echo "error: clone failed for $name" >&2
-            failed+=("$name (clone)")
+            failures+=("$name (clone)")
             continue
         fi
     fi
 
     echo "--> building"
-    if ! make -C "$dir" -j"$JOBS"; then
+    if ! run_as_user make -C "$dir" -j"$JOBS"; then
         echo "error: build failed for $name" >&2
-        failed+=("$name (build)")
+        failures+=("$name (build)")
         continue
     fi
 
@@ -224,57 +319,29 @@ for entry in "${REPOS[@]}"; do
     ready_names+=("$name")
 done
 
-# Phase 2: install everything in one elevated process.  A single doas/sudo
-# invocation means exactly one password prompt for the whole batch.
-installed=()
 if [ "${#ready_dirs[@]}" -gt 0 ]; then
     echo
-    echo "=== installing ${#ready_dirs[@]} repo(s) (one password prompt) ==="
-
-    statusdir="$(mktemp -d)"
-    trap 'rm -rf "$statusdir"' EXIT
-
-    # The install commands run under one root shell.  HOME is preserved so
-    # repos that install dotfiles target this account, matching jtupdate's
-    # elevated install behaviour.  Each result is written to a status file so
-    # the summary below stays accurate.
-    if "${PRIV[@]}" env HOME="$HOME" STATUSDIR="$statusdir" bash -c '
-        rc=0
-        i=0
-        for d in "$@"; do
-            printf "\n--> installing %s\n" "$d"
-            if make -C "$d" install; then
-                : > "$STATUSDIR/$i.ok"
-            else
-                echo "error: install failed: $d" >&2
-                : > "$STATUSDIR/$i.fail"
-                rc=1
-            fi
-            i=$((i + 1))
-        done
-        exit $rc
-    ' _ "${ready_dirs[@]}"; then
-        for i in "${!ready_dirs[@]}"; do
-            installed+=("${ready_names[$i]}")
-        done
-    else
-        for i in "${!ready_dirs[@]}"; do
-            if [ -f "$statusdir/$i.ok" ]; then
-                installed+=("${ready_names[$i]}")
-            else
-                failed+=("${ready_names[$i]} (install)")
-            fi
-        done
-    fi
+    echo "=== installing ${#ready_dirs[@]} repo(s) ==="
+    for i in "${!ready_dirs[@]}"; do
+        echo "--> installing ${ready_names[$i]}"
+        if ! make -C "${ready_dirs[$i]}" install; then
+            echo "error: install failed for ${ready_names[$i]}" >&2
+            failures+=("${ready_names[$i]} (install)")
+        fi
+    done
 fi
 
 echo
 echo "================= summary ================="
-if [ "${#installed[@]}" -gt 0 ]; then
-    printf 'installed: %s\n' "${installed[*]}"
-fi
-if [ "${#failed[@]}" -gt 0 ]; then
-    printf 'failed   : %s\n' "${failed[*]}"
+if [ "${#failures[@]}" -gt 0 ]; then
+    printf 'failed: %s\n' "${failures[*]}" >&2
     exit 1
 fi
 echo "all done"
+WORKER
+chmod 644 "$worker"
+
+"${PRIV[@]}" env HOME="$HOME" PATH="$PATH" \
+    TARGET_USER="$TARGET_USER" USER_HOME="$HOME" USER_PATH="$PATH" \
+    BASE_DIR="$BASE_DIR" JOBS="$JOBS" \
+    bash "$worker" "$PKG_FAMILY" "${PACKAGES[@]}" -- "${REPOS[@]}"
