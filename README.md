@@ -29,7 +29,7 @@ sudo make install greeter
 ** DISABLE YOUR CURRENT LOGIN MANAGER ** and enable jtgreeter with:
 sudo rc-update add jtgreeter default
 
-** project dir in ~/jtupdate/repos
+** project dir in ~/jtupdate/repos/jtgreeter
 ```
 
 `make install greeter` comments out the active `tty1` getty/agetty entries in
