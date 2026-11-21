@@ -1,5 +1,11 @@
 # JTDE
 
+## Preview
+
+<video src="src/re.mp4" controls width="600"></video>
+
+[Watch the video](src/re.mp4)
+
 `install-jt-binaries.sh` is an initial-install helper for the repositories
 managed by jtupdate. On Arch, Debian/Ubuntu, and Fedora it installs the build
 dependencies, clones each managed repo, builds it, and installs everything in
