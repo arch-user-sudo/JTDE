@@ -27,8 +27,8 @@ the extra `greeter` target, then switch over your login manager immediately:
 
 ```sh
 sudo make install greeter
-sudo rc-service <your-current-login-manager> stop
-sudo rc-update del <your-current-login-manager> default
+
+** DISABLE YOUR CURRENT LOGIN MANAGER **
 sudo rc-update add jtgreeter default
 ```
 
@@ -40,9 +40,6 @@ and enabling `jtgreeter`**, or you may be left without a login prompt on
 
 ### systemd
 
-Startup of the login manager is **not done automatically for systemd**. The
-jtgreeter installer only places `jtgreeter.service`; it does not enable it and
-does not disable your current display manager.
 
 **Do not enable the systemd service.** systemd support is still experimental
 and may cause issues on your system. Leave your current display manager in
