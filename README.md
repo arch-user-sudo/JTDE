@@ -26,7 +26,7 @@ the extra `greeter` target, then switch over your login manager immediately:
 ```sh
 sudo make install greeter
 
-** DISABLE YOUR CURRENT LOGIN MANAGER **
+** DISABLE YOUR CURRENT LOGIN MANAGER ** and enable jtgreeter with:
 sudo rc-update add jtgreeter default
 ```
 
