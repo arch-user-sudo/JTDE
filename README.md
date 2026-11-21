@@ -2,9 +2,9 @@
 
 ## Preview
 
-<video src="src/re.mp4" controls width="600"></video>
+![Preview](src/re-preview.gif)
 
-[Watch the video](src/re.mp4)
+[Watch the full video](src/re.mp4)
 
 `install-jt-binaries.sh` is an initial-install helper for the repositories
 managed by jtupdate. On Arch, Debian/Ubuntu, and Fedora it installs the build
