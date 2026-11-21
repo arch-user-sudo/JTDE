@@ -9,7 +9,7 @@
 `install-jt-binaries.sh` is an initial-install helper for the repositories
 managed by jtupdate. On Arch, Debian/Ubuntu, and Fedora it installs the build
 dependencies, clones each managed repo, builds it, and installs everything in
-one elevated pass (so you only enter your password once).
+one elevated pass .
 
 
 ## Usage
