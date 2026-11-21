@@ -18,7 +18,7 @@ Environment: `JTUPDATE_BASE_DIR`, `JOBS` (default: `2`).
 
 ## jtgreeter / login manager
 
-### OpenRC
+### OpenRC (requires elogind installed and running at startup)
 
 OpenRC is supported. From the jtgreeter checkout, run the install command with
 the extra `greeter` target, then switch over your login manager immediately:
@@ -28,6 +28,8 @@ sudo make install greeter
 
 ** DISABLE YOUR CURRENT LOGIN MANAGER ** and enable jtgreeter with:
 sudo rc-update add jtgreeter default
+
+** project dir in ~/jtupdate/repos
 ```
 
 `make install greeter` comments out the active `tty1` getty/agetty entries in
