@@ -102,6 +102,8 @@ REQUIRED_MODULES=(
     gtk+-3.0 gtk-layer-shell-0
     # jtpolkit
     polkit-agent-1 polkit-gobject-1
+    # jtfiles
+    udisks2
 )
 
 # Distro detection.  Package families are Arch, Debian, and Fedora; anything
@@ -124,6 +126,8 @@ case " $DISTRO_ID $DISTRO_LIKE " in
             librsvg pipewire libsoup3 curl networkmanager
             libinput pixman libdrm mesa lcms2 systemd-libs seatd
             libdisplay-info libliftoff harfbuzz gtk3 gtk-layer-shell polkit
+            # jtfiles (libudisks2 headers, library and daemon)
+            udisks2
         )
         ;;
     *debian*|*ubuntu*|*mint*|*pop*)
@@ -137,6 +141,8 @@ case " $DISTRO_ID $DISTRO_LIKE " in
             libgbm-dev libgles2-mesa-dev liblcms2-dev libudev-dev libseat-dev
             libdisplay-info-dev libliftoff-dev libharfbuzz-dev libgtk-3-dev
             libgtk-layer-shell-dev libpolkit-agent-1-dev libpolkit-gobject-1-dev
+            # jtfiles (libudisks2 headers, library and daemon)
+            libudisks2-dev udisks2
         )
         ;;
     *fedora*|*rhel*|*centos*|*rocky*|*alma*)
@@ -150,6 +156,8 @@ case " $DISTRO_ID $DISTRO_LIKE " in
             mesa-libGLES-devel lcms2-devel systemd-devel libseat-devel
             libdisplay-info-devel libliftoff-devel harfbuzz-devel gtk3-devel
             gtk-layer-shell-devel polkit-devel
+            # jtfiles (libudisks2 headers, library and daemon)
+            udisks2-devel udisks2
         )
         ;;
     *)
